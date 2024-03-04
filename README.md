@@ -2,6 +2,8 @@
 
 Repository to generate statistics from AMQ data.
 
+It generate a (relatively) interactive dashboard that can be published on Github Pages or any other Static Website Hosting services. It makes use of [Quarto](https://github.com/quarto-dev/quarto-cli) and [Plotly](https://github.com/plotly/plotly.py).
+
 ## Installation
 
 ### Development environment
