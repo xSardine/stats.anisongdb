@@ -1,0 +1,602 @@
+---
+title: "AnisongDB Dashboard"
+format: 
+  dashboard:
+    logo: images/sardinepfp.png
+    nav-buttons: [github]
+jupyter: python3
+---
+
+```{python}
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import plotly.io as pio
+
+with open("../data/raw/song_database.json") as json_file:
+    song_database = json.load(json_file)
+
+with open("../data/raw/expand_database.json") as json_file:
+    expand_database = json.load(json_file)
+
+dict_expand_database = {}
+for anime in expand_database:
+    dict_expand_database[anime["annId"]] = anime
+
+
+SONG_TYPE_MAPPING = {
+    1: "Opening",
+    2: "Ending",
+    3: "Insert Song",
+}
+
+# Define colors for each song type
+SONG_TYPE_COLORS = {
+    "Opening": "blue",
+    "Ending": "orangered",
+    "Insert Song": "green",
+}
+```
+
+# Overall
+
+## Row {height=40%}
+
+```{python}
+#| title: Song Type Distribution 
+anime_count = 0
+opening_count = 0
+ending_count = 0
+insert_count = 0
+
+for anime in song_database:
+    for song in anime["songs"]:
+        if song["songType"] == 1:
+            opening_count += 1
+        elif song["songType"] == 2:
+            ending_count += 1
+        else:
+            insert_count += 1
+
+    anime_count += 1
+
+types = ["Opening", "Ending", "Insert Song"]
+values = [opening_count, ending_count, insert_count]
+colors = ["blue", "orangered", "green"]
+
+fig = go.Figure(
+    data=[
+        go.Pie(
+            labels=types,
+            values=values,
+            hole=0.3,
+            marker=dict(colors=colors, line=dict(color="#000000", width=1)),
+        )
+    ]
+)
+
+# Update layout to adjust legend position
+fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))  # Adjust x and y values as needed
+
+```
+
+```{python}
+#| title: Song Upload Status
+
+def is_song_in_expand(annId, song):
+
+
+    if annId not in dict_expand_database:
+        return False
+
+    for expand_song in dict_expand_database[annId]["songs"]:
+        if (song["annSongId"] != -1 and song["annSongId"] == expand_song["annSongId"]) or (expand_song["name"] == song["songName"] and expand_song["artist"] == song["songArtist"] and expand_song["type"] == song["songType"] and expand_song["number"] == song["songNumber"]):
+            return True
+    return False
+
+nb_uploaded = 0
+nb_not_uploaded = 0
+nb_fully_uploaded = 0
+
+for anime in song_database:
+    for song in anime["songs"]:
+
+        if not is_song_in_expand(anime["annId"], song):
+            nb_fully_uploaded += 1
+            nb_uploaded += 1
+        else:
+            if song["links"]["HQ"] or song["links"]["MQ"] or song["links"]["audio"]:
+                nb_uploaded += 1
+            else:
+                nb_not_uploaded += 1
+
+# Create data for the pie chart
+labels = ["Fully Uploaded", "Partially Uploaded", "Not Uploaded"]
+values = [nb_fully_uploaded, nb_uploaded - nb_fully_uploaded, nb_not_uploaded]
+colors = ["#008000", "#00FF00", "orangered"]
+
+# Create the pie chart
+fig = go.Figure(
+    data=[
+        go.Pie(
+            labels=labels,
+            values=values,
+            marker=dict(colors=colors, line=dict(color="#000000", width=1)),
+            pull=[0, 0, 0.15],
+            hole=0.3,
+            # force font color black for not uploaded slice
+            textfont=dict(color=["white", "black", "black"]),
+            # increase font size
+            hoverinfo="label+value",
+            textinfo="percent",
+            # textposition="outside",  # Position the text outside of the pie chart
+        )
+    ]
+)
+
+# Update layout to adjust legend position
+fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))  # Adjust x and y values as needed
+```
+
+```{python}
+#| title: Number of songs per anime type
+anime_type_numbers = {}
+
+for anime in song_database:
+    for song in anime["songs"]:
+        if "animeType" not in anime or not anime["animeType"]:
+            continue
+
+        if anime["animeType"] not in anime_type_numbers:
+            anime_type_numbers[anime["animeType"]] = 0
+
+        anime_type_numbers[anime["animeType"]] += 1
+
+
+# pie chart of the anime types
+fig = go.Figure(
+    data=[
+        go.Pie(
+            labels=list(anime_type_numbers.keys()),
+            values=list(anime_type_numbers.values()),
+            hole=0.3,
+            marker=dict(line=dict(color="#000000", width=1)),
+        )
+    ]
+)
+
+# Update layout to adjust legend position
+fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))  # Adjust x and y values as needed
+```
+
+## Row {height=60%}
+
+```{python}
+#| title: Number of songs per anime genres
+
+anime_genre_numbers = {}
+
+for anime in song_database:
+    if "genres" not in anime or not anime["genres"]:
+        continue
+
+    for genre in anime["genres"]:
+        if genre not in anime_genre_numbers:
+            anime_genre_numbers[genre] = 0
+
+        anime_genre_numbers[genre] += 1
+
+# sort by value
+anime_genre_numbers = dict(sorted(anime_genre_numbers.items(), key=lambda item: item[1], reverse=True))
+
+# bar chart of the anime genres
+fig = go.Figure(data=[
+    go.Bar(
+        x=list(anime_genre_numbers.keys()),
+        y=list(anime_genre_numbers.values()),
+        marker=dict(color=list(anime_genre_numbers.values()), colorscale="Viridis"),
+    )
+])
+
+fig.update_layout(
+    xaxis_title="Genres",
+    yaxis_title="Number of songs",
+    hovermode="x unified",
+    xaxis=dict(  # Set the properties of the x axis
+        tickangle=30,  # Set the angle of the x axis tick labels to 30 degrees
+    ),
+)
+
+```
+
+```{python}
+#| title: Number of songs per year
+
+anime_season_numbers = {}
+
+for anime in song_database:
+    if "animeVintage" not in anime or not anime["animeVintage"]:
+        continue
+
+    season, year = anime["animeVintage"].split(" ")
+
+    if year not in anime_season_numbers:
+        anime_season_numbers[year] = 0
+
+    anime_season_numbers[year] += 1
+
+# sort by year (keys)
+anime_season_numbers = dict(sorted(anime_season_numbers.items(), key=lambda item: item[0]))
+
+# bar chart of the anime seasons
+fig = go.Figure(data=[
+    go.Bar(
+        x=list(anime_season_numbers.keys()),
+        y=list(anime_season_numbers.values()),
+        marker=dict(color=list(anime_season_numbers.values()), colorscale="Viridis"),
+    )
+])
+
+fig.update_layout(
+    xaxis_title="Seasons",
+    yaxis_title="Number of songs",
+    hovermode="x unified",
+    xaxis=dict(  # Set the properties of the x axis
+        tickangle=30,  # Set the angle of the x axis tick labels to 30 degrees
+    ),
+)
+```
+
+# Difficulty
+
+## Row {height=50%}
+
+```{python}
+#| title: Song Difficulty Distribution by Song Type
+#| jupyter_compat: true
+
+import pandas as pd
+
+# Assuming SONG_TYPE_MAPPING and SONG_TYPE_COLORS are defined somewhere in your code
+
+df_data = {"Song Type": [], "Difficulty": []}
+
+for anime in song_database:
+    for song in anime["songs"]:
+        song_type = SONG_TYPE_MAPPING.get(song["songType"], "Unknown")
+        song_difficulty = song.get("songDifficulty")
+        if song_difficulty is not None:
+            df_data["Song Type"].append(song_type)
+            df_data["Difficulty"].append(song_difficulty)
+
+df = pd.DataFrame(df_data)
+
+# Calculate mean guess rate for each song type
+mean_guess_rate = df.groupby("Song Type")["Difficulty"].mean().reset_index()
+
+# Create histogram
+fig = go.Figure()
+
+for song_type, color in SONG_TYPE_COLORS.items():
+    _ = fig.add_trace(go.Histogram(
+        x=df[df['Song Type'] == song_type]['Difficulty'],
+        name=song_type,
+        marker_color=color
+    ))
+
+
+# Add vertical lines for mean guess rate
+for index, row in mean_guess_rate.iterrows():
+    color = SONG_TYPE_COLORS.get(row['Song Type'], "black")  # Get color for the song type
+    _ = fig.add_vline(x=row["Difficulty"], line_dash="dash", line_color=color)
+    _ = fig.add_annotation(
+        x=row["Difficulty"],
+        y=0,
+        text=f"{row['Song Type']} Mean: {row['Difficulty']:.2f}",
+        showarrow=True,
+        arrowhead=1,
+        ax=0,
+        ay=-50,  # Adjusted to position annotation at the top
+        textangle=30,  # Rotation angle for the text
+        font=dict(color=color),  # Color annotation text same as histogram bar
+        bordercolor="black",
+        bgcolor="lightgrey",
+        opacity=0.85,
+        borderwidth=1,
+    )
+
+# Adjust positions of annotations to prevent overlap
+annotations = fig['layout']['annotations']
+for i in range(1, len(annotations)):
+    dy = 30
+    for j in range(i):
+        if annotations[i]['y'] - dy < annotations[j]['y'] + dy:
+            dy += 30
+    annotations[i]['y'] = annotations[i]['y'] + dy
+
+# Update layout
+_ = fig.update_layout(
+    barmode="stack",
+    xaxis_title="Difficulty",
+    yaxis_title="Count",
+    hovermode="x unified",
+)
+
+# Show plot
+fig.show()
+```
+
+```{python}
+#| title: Song Difficulty per genres
+
+anime_genres_diffs = {}
+
+for anime in song_database:
+    if "genres" not in anime or not anime["genres"]:
+        continue
+
+    for genre in anime["genres"]:
+        if genre not in anime_genres_diffs:
+            anime_genres_diffs[genre] = []
+
+        for song in anime["songs"]:
+            if "songDifficulty" in song and song["songDifficulty"]:
+                anime_genres_diffs[genre].append(song["songDifficulty"])
+
+# calculate mean difficulty for each genre
+for genre in anime_genres_diffs:
+    anime_genres_diffs[genre] = np.mean(anime_genres_diffs[genre])
+
+# Get the minimum and maximum values of the y axis
+min_value = min(anime_genres_diffs.values()) - 1
+max_value = max(anime_genres_diffs.values()) + 1
+
+# sort by value
+anime_genres_diffs = dict(sorted(anime_genres_diffs.items(), key=lambda item: item[1], reverse=True))
+
+# bar chart of the anime genres
+fig = go.Figure(data=[
+    go.Bar(
+        x=list(anime_genres_diffs.keys()),
+        y=list(anime_genres_diffs.values()),
+        marker=dict(color=list(anime_genres_diffs.values()), colorscale="Viridis"),
+    )
+])
+
+fig.update_layout(
+    yaxis_title="Mean Difficulty",
+    hovermode="x unified",
+    xaxis=dict(  # Set the properties of the x axis
+        tickangle=30,  # Set the angle of the x axis tick labels to 30 degrees
+    ),
+    yaxis=dict(  # Set the properties of the y axis
+        range=[min_value, max_value],  # Set the range of the y axis to be between min_value and max_value
+    ),
+)
+```
+
+## Row {height=50%}
+
+
+```{python}
+#| title: Top 50 Easiest Songs for each type
+# retrieve top easiest openings, endings and inserts
+df_data = []
+
+SONGINFO_MAX_SIZE = 35
+NB_TOPS = 50
+
+for anime in song_database:
+    for song in anime["songs"]:
+
+        if "songDifficulty" not in song or not song["songDifficulty"]:
+            continue
+
+        df_data.append(
+            {
+                "songName": song["songName"],
+                "songArtist": song["songArtist"],
+                "songDifficulty": song["songDifficulty"],
+                "songType": SONG_TYPE_MAPPING[song["songType"]],
+            }
+        )
+
+
+# sort by difficulty
+df_data = sorted(
+    df_data, key=lambda x: (x["songType"], x["songDifficulty"]), reverse=True
+)
+
+
+tops_data = {
+    "songInfo": [],
+    "songDifficulty": [],
+    "songType": [],
+}
+
+done_songs = set()
+fly_me_flag = False
+fukashigi_flag = False
+
+nb_op = 0
+nb_ed = 0
+nb_is = 0
+
+for song in df_data:
+
+    if song["songName"] in done_songs:
+        continue
+
+    done_songs.add(song["songName"])
+
+    # exceptions for FLY ME TO THE MOON
+    if "FLY ME TO THE MOON" in song["songName"]:
+        if fly_me_flag:
+            continue
+        fly_me_flag = True
+      
+    # exceptions for Fukashigi no Karte
+    if "Fukashigi no Karte" in song["songName"]:
+        if fukashigi_flag:
+            continue
+        fukashigi_flag = True
+
+    if song["songType"] == "Opening":
+        if nb_op >= NB_TOPS:
+            continue
+        nb_op += 1
+
+    if song["songType"] == "Ending":
+        if nb_ed >= NB_TOPS:
+            continue
+        nb_ed += 1
+
+    if song["songType"] == "Insert Song":
+        if nb_is >= NB_TOPS:
+            continue
+        nb_is += 1
+
+    song["songInfo"] = f'{song["songName"]} by {song["songArtist"]}'
+
+    if len(song["songInfo"]) > SONGINFO_MAX_SIZE:
+        song["songInfo"] = song["songInfo"][:SONGINFO_MAX_SIZE] + "..."
+
+    if song["songInfo"] not in tops_data["songInfo"]:
+        tops_data["songInfo"].append(song["songInfo"])
+        tops_data["songDifficulty"].append(song["songDifficulty"])
+        tops_data["songType"].append(song["songType"])
+
+df = pd.DataFrame(tops_data)
+
+_ = ffig = px.scatter(
+    df,
+    x="songDifficulty",
+    y="songInfo",
+    color="songType",
+    color_discrete_map=SONG_TYPE_COLORS,
+    labels={"songInfo": "Song", "songDifficulty": "Difficulty"},
+)
+
+_ = ffig.update_yaxes(showticklabels=False) # Hide y-axis labels
+
+_ = ffig.update_traces(mode="markers+lines")  # Show lines connecting the points
+_ = ffig.update_layout(hovermode="x unified")  # Enable hover for entire x-axis
+
+
+ffig.show()
+
+```
+
+```{python}
+#| title: Top 50 Hardest Songs for each type
+# sort by difficulty
+df_data = sorted(
+    df_data, key=lambda x: (x["songType"], x["songDifficulty"]), reverse=False
+)
+
+
+tops_data = {
+    "songInfo": [],
+    "songDifficulty": [],
+    "songType": [],
+}
+
+done_songs = set()
+
+nb_op = 0
+nb_ed = 0
+nb_is = 0
+
+for song in df_data:
+
+    if song["songName"] in done_songs:
+        continue
+
+    done_songs.add(song["songName"])
+
+    if song["songType"] == "Opening":
+        if nb_op >= NB_TOPS:
+            continue
+        nb_op += 1
+
+    if song["songType"] == "Ending":
+        if nb_ed >= NB_TOPS:
+            continue
+        nb_ed += 1
+
+    if song["songType"] == "Insert Song":
+        if nb_is >= NB_TOPS:
+            continue
+        nb_is += 1
+
+    song["songInfo"] = f'{song["songName"]} by {song["songArtist"]}'
+
+    if len(song["songInfo"]) > SONGINFO_MAX_SIZE:
+        song["songInfo"] = song["songInfo"][:SONGINFO_MAX_SIZE] + "..."
+
+    if song["songInfo"] not in tops_data["songInfo"]:
+        tops_data["songInfo"].append(song["songInfo"])
+        tops_data["songDifficulty"].append(song["songDifficulty"])
+        tops_data["songType"].append(song["songType"])
+
+df = pd.DataFrame(tops_data)
+
+_ = ffig = px.scatter(
+    df,
+    x="songDifficulty",
+    y="songInfo",
+    color="songType",
+    color_discrete_map=SONG_TYPE_COLORS,
+    labels={"songInfo": "Song", "songDifficulty": "Difficulty"},
+)
+
+_ = ffig.update_yaxes(showticklabels=False) # Hide y-axis labels
+
+_ = ffig.update_traces(mode="markers+lines")  # Show lines connecting the points
+_ = ffig.update_layout(hovermode="x unified")  # Enable hover for entire x-axis
+
+
+ffig.show()
+
+```
+
+
+
+# About
+
+## About the data
+
+About the data
+---
+
+Data is taken from [AMQ](https://animemusicquiz.com/)
+
+The data is up to date for anything available in Expand Library :
+
+* Anime name
+* Song Name
+* Artist Name
+* Song types
+
+Which mean all of that is dated to the last time this page was updated.
+
+However, for anything else, it dates back to **February 3rd 2024**, as there is no reliable way to get this data, except me going out of my way to collect it :
+
+* Alternative anime names
+* Anime vintage
+* Anime genres & tags
+* Song difficulty
+* Song category (this is even older data)
+* etc...
+
+~~harass Ege to give me live access to the database~~
+
+## Source code
+
+About the source code
+---
+
+The source code and the time this page was last updated is available in this [github repository](https://github.com/xSardine/AMQ-Stats).
+The code won't be useful anyway because you don't have the data :shrug:
