@@ -40,7 +40,7 @@ Render the HTML :
 quarto render stats --output-dir ../docs/
 ```
 
-This will generate the HTML file in the `public` folder.
+This will generate the HTML file in the `docs` folder.
 
 Preview the HTML file in your browser :
 
@@ -49,6 +49,11 @@ quarto preview stats --output-dir ../docs/
 ```
 
 This will run a preview of the quarto document in your browser.
+
+To publish it on github pages :
+```bash
+quarto publish gh-pages
+```
 
 ## Licence
 
