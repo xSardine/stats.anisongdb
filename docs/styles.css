@@ -1,0 +1,7 @@
+.dashboard-panel g.traces:first-child {
+  transform: translate(-10px, 16.9px) !important;
+}
+
+.dashboard-panel g.traces:last-child {
+  transform: translate(-10px, 40.7px) !important;
+}
