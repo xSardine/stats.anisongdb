@@ -36,6 +36,14 @@ pip install -r requirements.txt
 
 Place the data in a `data/raw` folder.
 
+Preview in your browser :
+
+```bash
+quarto preview stats --output-dir ../docs/
+```
+
+This will run a preview of the quarto document in your browser.
+
 Render the HTML :
 
 ```bash
@@ -43,14 +51,6 @@ quarto render stats --output-dir ../docs/
 ```
 
 This will generate the HTML file in the `docs` folder.
-
-Preview the HTML file in your browser :
-
-```bash
-quarto preview stats --output-dir ../docs/
-```
-
-This will run a preview of the quarto document in your browser.
 
 To publish it on github pages :
 ```bash

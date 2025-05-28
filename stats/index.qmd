@@ -4,27 +4,59 @@ format:
   dashboard:
     logo: images/sardinepfp.png
     nav-buttons: [github]
+    navbar: true
 jupyter: python3
 ---
+
+<div id="warning-banner" style="
+  background-color: rgba(255, 165, 0, 0.3);  /* light orange, semi-transparent */
+  color: black;
+  text-align: center;
+  padding: 10px;
+  font-weight: bold;
+  border-bottom: 2px solid black;
+  position: relative;
+  display: none;  /* Hide initially; JS will handle display */
+">
+⚠️ If you're having issues with legends being truncated, please use Firefox.
+<span style="
+  position: absolute;
+  right: 10px;
+  top: 5px;
+  cursor: pointer;
+  color: red;
+  font-weight: bold;
+  font-size: 20px;
+" onclick="dismissWarning()">×</span>
+</div>
+
+<script>
+  // Function to dismiss the warning and store in localStorage
+  function dismissWarning() {
+    document.getElementById('warning-banner').style.display = 'none';
+    localStorage.setItem('anisongdb-warning-dismissed', 'true');
+  }
+
+  // Check if user is on Firefox or has dismissed the warning before
+  const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+  const isDismissed = localStorage.getItem('anisongdb-warning-dismissed') === 'true';
+
+  if (!isFirefox && !isDismissed) {
+    document.getElementById('warning-banner').style.display = 'block';
+  }
+</script>
 
 ```{python}
 import json
 import plotly.express as px
 import plotly.graph_objects as go
+from IPython.display import display, HTML
 import pandas as pd
 import numpy as np
 import plotly.io as pio
 
-with open("../data/raw/song_database.json") as json_file:
+with open("../data/raw/song_database.json", encoding="utf-8") as json_file:
     song_database = json.load(json_file)
-
-with open("../data/raw/expand_database.json") as json_file:
-    expand_database = json.load(json_file)
-
-dict_expand_database = {}
-for anime in expand_database:
-    dict_expand_database[anime["annId"]] = anime
-
 
 SONG_TYPE_MAPPING = {
     1: "Opening",
@@ -51,7 +83,8 @@ opening_count = 0
 ending_count = 0
 insert_count = 0
 
-for anime in song_database:
+for annId in song_database:
+    anime = song_database[annId]
     for song in anime["songs"]:
         if song["songType"] == 1:
             opening_count += 1
@@ -59,13 +92,15 @@ for anime in song_database:
             ending_count += 1
         else:
             insert_count += 1
-
     anime_count += 1
 
 types = ["Opening", "Ending", "Insert Song"]
 values = [opening_count, ending_count, insert_count]
 colors = ["blue", "orangered", "green"]
 
+total_songs = opening_count + ending_count + insert_count
+
+# Create pie chart
 fig = go.Figure(
     data=[
         go.Pie(
@@ -76,41 +111,30 @@ fig = go.Figure(
         )
     ]
 )
-
-# Update layout to adjust legend position
-fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))  # Adjust x and y values as needed
-
+fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))
 ```
 
 ```{python}
 #| title: Song Upload Status
 
-def is_song_in_expand(annId, song):
-
-
-    if annId not in dict_expand_database:
-        return False
-
-    for expand_song in dict_expand_database[annId]["songs"]:
-        if (song["annSongId"] != -1 and song["annSongId"] == expand_song["annSongId"]) or (expand_song["name"] == song["songName"] and expand_song["artist"] == song["songArtist"] and expand_song["type"] == song["songType"] and expand_song["number"] == song["songNumber"]):
-            return True
-    return False
-
 nb_uploaded = 0
 nb_not_uploaded = 0
 nb_fully_uploaded = 0
 
-for anime in song_database:
+for annId in song_database:
+    anime = song_database[annId]
     for song in anime["songs"]:
 
-        if not is_song_in_expand(anime["annId"], song):
+        audio_uploaded = True if song["links"]["audio"] else False
+        hq_uploaded = True if song["links"]["HQ"] else False
+        mq_uploaded = True if song["links"]["MQ"] else False
+
+        if all([audio_uploaded, mq_uploaded]):
             nb_fully_uploaded += 1
+        elif any([audio_uploaded, hq_uploaded, mq_uploaded]):
             nb_uploaded += 1
         else:
-            if song["links"]["HQ"] or song["links"]["MQ"] or song["links"]["audio"]:
-                nb_uploaded += 1
-            else:
-                nb_not_uploaded += 1
+            nb_not_uploaded += 1
 
 # Create data for the pie chart
 labels = ["Fully Uploaded", "Partially Uploaded", "Not Uploaded"]
@@ -144,7 +168,8 @@ fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))  # Adjust x and y value
 #| title: Number of songs per anime type
 anime_type_numbers = {}
 
-for anime in song_database:
+for annId in song_database:
+    anime = song_database[annId]
     for song in anime["songs"]:
         if "animeType" not in anime or not anime["animeType"]:
             continue
@@ -178,7 +203,10 @@ fig.update_layout(legend=dict(x=0.8, y=0.8, title=None))  # Adjust x and y value
 
 anime_genre_numbers = {}
 
-for anime in song_database:
+for annId in song_database:
+
+    anime = song_database[annId]
+
     if "genres" not in anime or not anime["genres"]:
         continue
 
@@ -216,7 +244,10 @@ fig.update_layout(
 
 anime_season_numbers = {}
 
-for anime in song_database:
+for annId in song_database:
+
+    anime = song_database[annId]
+
     if "animeVintage" not in anime or not anime["animeVintage"]:
         continue
 
@@ -225,10 +256,13 @@ for anime in song_database:
     if year not in anime_season_numbers:
         anime_season_numbers[year] = 0
 
-    anime_season_numbers[year] += 1
+    anime_season_numbers[year] += len(anime["songs"])
 
 # sort by year (keys)
 anime_season_numbers = dict(sorted(anime_season_numbers.items(), key=lambda item: item[0]))
+
+# Display total number of songs
+total_songs = sum(anime_season_numbers.values())
 
 # bar chart of the anime seasons
 fig = go.Figure(data=[
@@ -263,11 +297,18 @@ import pandas as pd
 
 df_data = {"Song Type": [], "Difficulty": []}
 
-for anime in song_database:
+for annId in song_database:
+    anime = song_database[annId]
     for song in anime["songs"]:
         song_type = SONG_TYPE_MAPPING.get(song["songType"], "Unknown")
         song_difficulty = song.get("songDifficulty")
+        
         if song_difficulty is not None:
+            
+            # if song_difficulty is 0 but is not uploaded, ignore it
+            if song_difficulty == 0 and not song["links"]["audio"]:
+                continue
+
             df_data["Song Type"].append(song_type)
             df_data["Difficulty"].append(song_difficulty)
 
@@ -333,7 +374,10 @@ fig.show()
 
 anime_genres_diffs = {}
 
-for anime in song_database:
+for annId in song_database:
+
+    anime = song_database[annId]
+
     if "genres" not in anime or not anime["genres"]:
         continue
 
@@ -388,16 +432,17 @@ df_data = []
 SONGINFO_MAX_SIZE = 35
 NB_TOPS = 50
 
-for anime in song_database:
+for annId in song_database:
+    anime = song_database[annId]
     for song in anime["songs"]:
 
-        if "songDifficulty" not in song or not song["songDifficulty"]:
+        if "songDifficulty" not in song or not song["songDifficulty"] or song["songDifficulty"] == 0 or song["songDifficulty"] == 100:
             continue
 
         df_data.append(
             {
-                "songName": song["songName"],
-                "songArtist": song["songArtist"],
+                "romajiSongName": song["romajiSongName"],
+                "romajiSongArtist": song["romajiSongArtist"],
                 "songDifficulty": song["songDifficulty"],
                 "songType": SONG_TYPE_MAPPING[song["songType"]],
             }
@@ -426,19 +471,19 @@ nb_is = 0
 
 for song in df_data:
 
-    if song["songName"] in done_songs:
+    if song["romajiSongName"] in done_songs:
         continue
 
-    done_songs.add(song["songName"])
+    done_songs.add(song["romajiSongName"])
 
     # exceptions for FLY ME TO THE MOON
-    if "FLY ME TO THE MOON" in song["songName"]:
+    if "FLY ME TO THE MOON" in song["romajiSongName"]:
         if fly_me_flag:
             continue
         fly_me_flag = True
       
     # exceptions for Fukashigi no Karte
-    if "Fukashigi no Karte" in song["songName"]:
+    if "Fukashigi no Karte" in song["romajiSongName"]:
         if fukashigi_flag:
             continue
         fukashigi_flag = True
@@ -458,7 +503,7 @@ for song in df_data:
             continue
         nb_is += 1
 
-    song["songInfo"] = f'{song["songName"]} by {song["songArtist"]}'
+    song["songInfo"] = f'{song["romajiSongName"]} by {song["romajiSongArtist"]}'
 
     if len(song["songInfo"]) > SONGINFO_MAX_SIZE:
         song["songInfo"] = song["songInfo"][:SONGINFO_MAX_SIZE] + "..."
@@ -482,7 +527,7 @@ _ = ffig = px.scatter(
 _ = ffig.update_yaxes(showticklabels=False) # Hide y-axis labels
 
 _ = ffig.update_traces(mode="markers+lines")  # Show lines connecting the points
-_ = ffig.update_layout(hovermode="x unified")  # Enable hover for entire x-axis
+_ = ffig.update_layout(hovermode="closest")  # Enable hover for entire x-axis
 
 
 ffig.show()
@@ -511,10 +556,10 @@ nb_is = 0
 
 for song in df_data:
 
-    if song["songName"] in done_songs:
+    if song["romajiSongName"] in done_songs:
         continue
 
-    done_songs.add(song["songName"])
+    done_songs.add(song["romajiSongName"])
 
     if song["songType"] == "Opening":
         if nb_op >= NB_TOPS:
@@ -531,7 +576,7 @@ for song in df_data:
             continue
         nb_is += 1
 
-    song["songInfo"] = f'{song["songName"]} by {song["songArtist"]}'
+    song["songInfo"] = f'{song["romajiSongName"]} by {song["romajiSongArtist"]}'
 
     if len(song["songInfo"]) > SONGINFO_MAX_SIZE:
         song["songInfo"] = song["songInfo"][:SONGINFO_MAX_SIZE] + "..."
@@ -555,7 +600,7 @@ _ = ffig = px.scatter(
 _ = ffig.update_yaxes(showticklabels=False) # Hide y-axis labels
 
 _ = ffig.update_traces(mode="markers+lines")  # Show lines connecting the points
-_ = ffig.update_layout(hovermode="x unified")  # Enable hover for entire x-axis
+_ = ffig.update_layout(hovermode="closest")  # Enable hover for entire x-axis
 
 
 ffig.show()
@@ -573,25 +618,32 @@ About the data
 
 Data is taken from [AMQ](https://animemusicquiz.com/)
 
-The data is up to date for anything available in Expand Library :
+Anything available natively in expand is up to date to the last time the page was updated (as of now, 27/05/2025) :
 
 * Anime name
+* Alternative anime names
+* Anime vintage
 * Song Name
 * Artist Name
 * Song types
-
-Which mean all of that is dated to the last time this page was updated.
-
-However, for anything else, it dates back to **February 3rd 2024**, as there is no reliable way to get this data, except me going out of my way to collect it :
-
-* Alternative anime names
-* Anime vintage
-* Anime genres & tags
-* Song difficulty
 * Song category (this is even older data)
-* etc...
+
+However, for anything else, it is only collected once a month, so it may be slightly outdated (i.e last update minus at most a month) :
+
+* Anime List IDs (MAL, AniList, Kitsu)
+* Anime genres & tags
+* Song links (audio, HQ, MQ)
+* Song difficulty
 
 ~~harass Ege to give me live access to the database~~
+
+## Data Limitations
+
+Data limitations
+---
+
+Regarding the "Number of songs per year" chart, the data is not completely accurate because AMQ tracks the year of the anime, not the individual songs. This means that if an anime has multiple songs released in different years (cf. long-running shows), they will all be counted under the year of the anime's release.
+
 
 ## Source code
 
